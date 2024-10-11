@@ -1,53 +1,39 @@
 const express = require('express');
+const { MongoClient, ObjectId } = require('mongodb');
 const cors = require('cors');
-const mongoose = require('mongoose');
+require('dotenv').config();
+
 const app = express();
-const port = 3001; // Choose a port that doesn't conflict with your frontend
 
 app.use(cors());
 app.use(express.json());
 
-require('dotenv').config();
+let db;
 
-// MongoDB connection
-mongoose.connect(process.env.MONGODB_URI)
-  .then(() => console.log('Successfully connected to MongoDB'))
-  .catch(err => console.error('Connection error', err));
+// Function to connect to the database
+const connectToDatabase = async (url) => {
+  const client = new MongoClient(url);
+  await client.connect();
+  console.log('Connected successfully to MongoDB');
+  db = client.db();
+  return client;
+};
 
-// Define Todo schema and model
-const todoSchema = new mongoose.Schema({
-  title: { type: String, required: true },
-  completed: { type: Boolean, default: false },
-});
-
-const Todo = mongoose.model('Todo', todoSchema);
-
-// GET endpoint to retrieve the todo list
+// Define your routes here
 app.get('/todos', async (req, res) => {
-  try {
-    const todos = await Todo.find();
-    res.json(todos);
-  } catch (error) {
-    res.status(500).json({ error: 'Error fetching todos' });
-  }
+  const todos = await db.collection('todos').find().toArray();
+  res.json(todos);
 });
 
-// POST endpoint to create a new todo item
 app.post('/todos', async (req, res) => {
   const { title } = req.body;
   if (!title) {
     return res.status(400).json({ error: 'Title is required' });
   }
-  try {
-    const newTodo = new Todo({ title });
-    await newTodo.save();
-    res.status(201).json(newTodo);
-  } catch (error) {
-    res.status(500).json({ error: 'Error creating todo' });
-  }
+  const newTodo = { title, completed: false };
+  const result = await db.collection('todos').insertOne(newTodo);
+  res.status(201).json({ ...newTodo, _id: result.insertedId });
 });
 
-app.listen(port, () => {
-  console.log(`Server running at http://localhost:${port}`);
-});
-
+// Export the app and the connectToDatabase function
+module.exports = { app, connectToDatabase };
